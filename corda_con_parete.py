@@ -35,6 +35,8 @@ bColor='red'            # bob color
 scale=100.0             # pixels/m
 tau=20                  # milliseconds
 
+##########################################
+
 class Wall:
   def __init__(self, inclination):
       self.inclination = inclination
@@ -90,10 +92,22 @@ class Climber:
     if self.grabbed:
       self.state[0]=(np.clip(event.x,self.rad,cw-self.rad)-Ox)/scale
       self.state[1]=(Oy-np.clip(event.y,self.rad,ch-self.rad))/scale
+      # update graphics immediately so the bob follows the mouse
+      try:
+        canvas.coords(BandImg,catenary(self.state[:2]))
+        canvas.coords(BobImg,circ(self.state[:2]))
+      except Exception:
+        pass
 
   def release(self, event):
     self.state[2:]=[0.0,0.0]
     self.grabbed=False
+    # ensure final position is shown
+    try:
+      canvas.coords(BandImg,catenary(self.state[:2]))
+      canvas.coords(BobImg,circ(self.state[:2]))
+    except Exception:
+      pass
 
   def move(self, wall):
     global BandImg, BobImg, nIter, Lab, t
@@ -132,13 +146,49 @@ class Climber:
       self.state[0] += normal[0] * (penetration + 1e-4)
       self.state[1] += normal[1] * (penetration + 1e-4)
 
+#########################################
+
 # Start/Stop
 def StartStop():
   global RunMotion
   RunMotion=not RunMotion
-  StartButton['text']='Stop' if RunMotion else 'Restart'
-  for ee in [ExitButton]+VarEntry:
+  StartButton['text']='Stop' if RunMotion else 'Start'
+  for ee in [ExitButton, RestartButton]+VarEntry:
     ee['state']=DISABLED if RunMotion else NORMAL
+
+# Restart
+def Restart():
+  global RunMotion, nIter, tcount, tt0, t, inputs, L, k1, k3, m, delta, scale, dt, tau, Jacopo
+  # stop motion
+  RunMotion = False
+  StartButton['text'] = 'Start'
+
+  # restore initial inputs and GUI entries
+  try:
+    init = initial_inputs
+  except NameError:
+    return
+  inputs = init.copy()
+  for i, ent in enumerate(VarEntry):
+    ent['state'] = NORMAL
+    ent.delete(0, END)
+    ent.insert(0, f'{inputs[i]:.3f}')
+
+  # restore state and parameters
+  Jacopo.state = inputs[:4]
+  L, k1, k3, m, delta, scale, dt, tau = inputs[4:]
+  tau = int(tau)
+  t = [0.0, dt]
+
+  # reset counters and labels
+  nIter = 0
+  tcount = 0
+  tt0 = time.time()
+  Lab[ITER]['text'] = f'{nIter:d}'
+
+  # update graphics
+  canvas.coords(BandImg, catenary(Jacopo.state[:2]))
+  canvas.coords(BobImg, circ(Jacopo.state[:2]))
 
 # Read Entries      
 def ReadData(key):
@@ -230,6 +280,7 @@ def dfdt(state, t):
     ay = fy / m
     return [state[2], state[3], ax, ay]
 
+####################################################
 
 # Initializations
 rock = Wall(inclination)
@@ -238,7 +289,7 @@ Jacopo.initialize_on_wall(rock)
 
 # Create Root window
 root=Tk()
-root.title('Catenary Pendulum')
+root.title('Climbing Fall Simulation')
 
 # Add canvas to root window
 canvas=Canvas(root,width=cw,height=ch,background='#ffffff')
@@ -257,6 +308,8 @@ nr=0
 StartButton=Button(toolbar,text='Start',command=StartStop,\
   width=ButtWidth)
 StartButton.grid(row=nr,column=0,sticky=W)
+RestartButton=Button(toolbar,text='Restart',command=Restart,width=ButtWidth)
+RestartButton.grid(row=nr,column=1,sticky=W)
 nr+=1
 ExitButton=Button(toolbar,text='Exit',command=quit,width=ButtWidth)
 ExitButton.grid(row=nr,column=0,sticky=W)
@@ -267,6 +320,7 @@ VarLab=['x\u2080 (m)','y\u2080 (m)','vx\u2080 (m/s)','vy\u2080 (m/s)',\
   'Length (m)','k1 (N/m)','k3 (N/m³)','Mass (kg)','\u03B7 (Ns/m)','scale (px/m)',\
     'Time step (s)','\u03C4 (ms)']
 inputs=Jacopo.state+[L,k1,k3,m,delta,scale,dt,tau]
+initial_inputs = inputs.copy()
 VarEntry=[]
 for i,lab in enumerate(VarLab):
   Label(toolbar,text=str(lab)).grid(row=nr,column=0)
