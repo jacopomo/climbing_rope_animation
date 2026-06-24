@@ -6,6 +6,9 @@ from scipy.integrate import odeint
 from scipy.optimize import fsolve
 from numpy.linalg import norm
 
+from rope_simul import Belayer, Climber, Rope, Wall
+import rope_simul.config as config
+
 # Global Variable
 RunMotion=False
 
@@ -36,117 +39,6 @@ scale=100.0             # pixels/m
 tau=20                  # milliseconds
 
 ##########################################
-
-class Wall:
-  def __init__(self, inclination):
-      self.inclination = inclination
-
-  def point_on(self, distance):
-      '''
-      distance in meters returns [x,y] in meters along the wall direction from pivot
-      '''
-      theta = np.radians(self.inclination)
-      dx = distance * np.sin(theta)
-      dy = distance * np.cos(theta)
-      return dx, dy
-  
-  def normal_vector(self):
-      theta = np.radians(self.inclination)
-      return np.array([np.cos(theta), -np.sin(theta)])
-
-  def distance(self, pos):
-      return np.dot(np.array(pos), self.normal_vector())
-  
-  def draw(self):
-      global cw, ch, scale
-      d = np.sqrt((cw/scale)**2 + (ch/scale)**2)
-      x1, y1 = meter2pix(self.point_on(-d))
-      x2, y2 = meter2pix(self.point_on(d))
-      normal = self.normal_vector()
-      dx = -normal[0] * d * scale
-      dy = normal[1] * d * scale
-      x3, y3 = x2 + dx, y2 + dy
-      x4, y4 = x1 + dx, y1 + dy
-      canvas.create_polygon(x1, y1, x2, y2, x3, y3, x4, y4,
-                            fill='#8B4513', stipple='gray25', outline='black')
-      canvas.create_line(x1, y1, x2, y2, fill='black', width=2)
-
-class Climber:
-  def __init__(self, state, rad, grabbed=False):
-      self.state = state
-      self.rad = rad
-      self.grabbed = grabbed
-  
-  def initialize_on_wall(self, wall):
-      x = wall.point_on(L)[0] + wall.normal_vector()[0] * (1.01 * self.rad / scale)
-      y = wall.point_on(L)[1] + wall.normal_vector()[1] * (1.01 * self.rad / scale)
-      self.state = [x, y, 0.0, 0.0]
-  
-  def grab(self, event):
-    global RunMotion
-    if not RunMotion:
-      dist=np.array(meter2pix(self.state[:2]))-np.array([event.x,event.y])
-      self.grabbed=norm(dist)<self.rad
-  
-  def drag(self, event):
-    if self.grabbed:
-      self.state[0]=(np.clip(event.x,self.rad,cw-self.rad)-Ox)/scale
-      self.state[1]=(Oy-np.clip(event.y,self.rad,ch-self.rad))/scale
-      # update graphics immediately so the bob follows the mouse
-      try:
-        canvas.coords(BandImg,catenary(self.state[:2]))
-        canvas.coords(BobImg,circ(self.state[:2]))
-      except Exception:
-        pass
-
-  def release(self, event):
-    self.state[2:]=[0.0,0.0]
-    self.grabbed=False
-    # ensure final position is shown
-    try:
-      canvas.coords(BandImg,catenary(self.state[:2]))
-      canvas.coords(BobImg,circ(self.state[:2]))
-    except Exception:
-      pass
-
-  def move(self, wall):
-    global BandImg, BobImg, nIter, Lab, t
-
-    # integrate one step
-    nIter+=1
-    psoln=odeint(dfdt,self.state,t)
-    self.state=psoln[1]
-
-    # check for collision with wall
-    self.collision(wall)
-
-    # update graphics (circle)
-    canvas.coords(BandImg,catenary(self.state[:2]))
-    canvas.coords(BobImg,circ(self.state[:2]))
-    if nIter%20==0:
-      Lab[ITER]['text']=f'{nIter:d}'
-
-  def collision(self, wall):
-    pos = np.array(self.state[:2])
-    vel = np.array(self.state[2:])
-    d_signed = wall.distance(pos)
-    radius_m = self.rad/scale
-    penetration = radius_m - d_signed
-    if penetration > 0.0:
-      normal = wall.normal_vector()
-      vel_n = np.dot(vel, normal)
-      # set normal component to -e * vel_n (e=0.5)
-      e = 0.25
-      vel_t = vel - vel_n * normal
-      vel_post = vel_t - e * vel_n * normal
-      # update velocities
-      self.state[2] = vel_post[0]
-      self.state[3] = vel_post[1]
-      # nudge position out of wall
-      self.state[0] += normal[0] * (penetration + 1e-4)
-      self.state[1] += normal[1] * (penetration + 1e-4)
-
-#########################################
 
 # Start/Stop
 def StartStop():
@@ -250,20 +142,20 @@ def catenary(pos):
 def Phi(z):
     return np.where(z > 0, 1.0, 0.0)
 
-# System of first-order ODEs describing the rope dynamics
+# System of first-order ODEs describing the climber dynamics
 def dfdt(state, t):
-    global g, k1, k3, m, delta, scale
+    global g, delta, scale
     pos = np.array(state[:2])
     vel = np.array(state[2:])
     r = norm(pos)
-    stretch = r - L
+    s = Edelrid.stretch()
     
     # Radial velocity component
     r_dot = np.dot(pos, vel) / r if r > 1e-6 else 0.0
     
     # Spring forces (only when stretched)
-    if stretch > 0:
-        force = -k1*stretch - k3*stretch**3
+    if s > 0.0:
+        force = Edelrid.elastic_force()
         force_vec = force * pos / r
         
         # Velocity damping (only when stretching)
@@ -284,8 +176,10 @@ def dfdt(state, t):
 
 # Initializations
 rock = Wall(inclination)
-Jacopo  = Climber([], rad)
-Jacopo.initialize_on_wall(rock)
+Jacopo  = Climber([], rad, m)
+Nico = Belayer([0,0,0,0], rad, m)
+Edelrid = Rope([k1, k3], Nico, Jacopo, L)
+Jacopo.initialize_on_wall(rock, dist=L)
 
 # Create Root window
 root=Tk()
@@ -344,7 +238,7 @@ for i,ll in enumerate(LabList):
 canvas.create_oval(Ox-prad,Oy-prad,Ox+prad,Oy+prad,fill='black')
 BandImg=canvas.create_line([Ox,Oy]+meter2pix(Jacopo.state[:2]),fill='black')
 BobImg=canvas.create_oval(circ(Jacopo.state[:2]),fill=bColor)
-rock.draw()
+rock.draw(canvas)
 
 # ...................................................................
 t=[0.0,dt]
