@@ -54,46 +54,6 @@ class Bolt:
         bolts.sort(key=lambda bolt: bolt.dist)
         return bolts
 
-
-    @staticmethod
-    def create_scene(wall, N=5, slack=None, mass=None, rad=None, rope_specs=None):
-        """Create bolts, belayer, climber and Rope for a default scene.
-
-        Returns (belayer, climber, rope, bolts).
-        """
-        from .person import Person
-        from .rope import Rope
-        from . import config
-
-        if slack is None:
-            slack = config.L
-        if mass is None:
-            mass = config.m
-        if rad is None:
-            rad = config.rad
-        if rope_specs is None:
-            rope_specs = (config.k1, config.k3)
-
-        bolts = Bolt.generate(wall, N=N)
-        belayer = Person(rad=rad, mass=mass)
-        climber = Person(rad=rad, mass=mass)
-
-        # position belayer just off the wall at the bottommost bolt and climber at the topmost bolt
-        if bolts:
-            bottom_bolt = bolts[0]
-            top_bolt = bolts[-1]
-            belayer.attach_bolt(bottom_bolt)
-            climber.attach_bolt(top_bolt)
-            belayer.initialize_on_wall(wall, dist=bottom_bolt.dist)
-            climber.initialize_on_wall(wall, dist=top_bolt.dist)
-        else:
-            # fallback to reasonable positions
-            belayer.initialize_on_floor(wall)
-            climber.initialize_on_wall(wall, dist=0.0)
-
-        rope = Rope(rope_specs, belayer, climber, bolts=bolts, slack=slack)
-        return belayer, climber, rope, bolts
-
     @classmethod
     def generate_along_wall(cls, wall, N=5, margin=2.0):
         """Generate N bolts along the visible portion of the wall within the canvas.

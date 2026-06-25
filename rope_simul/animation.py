@@ -2,7 +2,6 @@ import time
 from tkinter import *
 import numpy as np
 from scipy.integrate import odeint
-from scipy.optimize import fsolve
 
 from . import config
 from .utils import meter2pix, circ
@@ -36,8 +35,41 @@ class Simulation:
         self.root = Tk()
         self.root.title('Climbing Fall Simulation')
         self._build_ui()
-        self._draw_static_objects()
+        self._init_canvas_items()
         self.update_graphics()
+
+    @staticmethod
+    def create_scene(wall, N=5, slack=None, mass=None, rad=None, rope_specs=None):
+        from .bolt import Bolt
+        from .person import Person
+        from .rope import Rope
+
+        if slack is None:
+            slack = config.L
+        if mass is None:
+            mass = config.m
+        if rad is None:
+            rad = config.rad
+        if rope_specs is None:
+            rope_specs = (config.k1, config.k3)
+
+        bolts = Bolt.generate(wall, N=N)
+        belayer = Person(rad=rad, mass=mass)
+        climber = Person(rad=rad, mass=mass)
+
+        if bolts:
+            bottom_bolt = bolts[0]
+            top_bolt = bolts[-1]
+            belayer.attach_bolt(bottom_bolt)
+            climber.attach_bolt(top_bolt)
+            belayer.initialize_on_floor(wall)
+            climber.initialize_on_bolt()
+        else:
+            belayer.initialize_on_floor(wall)
+            climber.initialize_on_wall(wall, dist=0.0)
+
+        rope = Rope(rope_specs, belayer, climber, bolts=bolts, slack=slack)
+        return belayer, climber, rope, bolts
 
     def _build_ui(self):
         cw, ch = config.cw, config.ch
@@ -94,25 +126,18 @@ class Simulation:
         Label(toolbar, text='Iterations').grid(row=row, column=0)
         self.iter_label.grid(row=row, column=1, sticky=W)
 
-    def _draw_static_objects(self):
-        Ox, Oy = config.Ox, config.Oy
+    def _init_canvas_items(self):
         bolt_rad = config.bolt_rad
         self.wall.draw(self.canvas)
+
         # draw floor as horizontal line
-        floor_y_px = meter2pix([0.0, (config.Oy - config.ch + 0)/config.scale])[1]
+        floor_y_px = meter2pix([0.0, (config.Oy - config.ch + 0) / config.scale])[1]
         self.canvas.create_line(0, floor_y_px, config.cw, floor_y_px, fill='black', width=4)
 
-        # draw bolts if present and build rope points
-        points = [self.belayer.state[:2]]
-        if hasattr(self.rope, 'bolts') and self.rope.bolts:
-            for bolt in self.rope.bolts:
-                bolt.draw(self.canvas, meter2pix, bolt_rad)
-                points.append(bolt.pos().tolist())
-        points.append(self.climber.state[:2])
-        # convert to pixel coords flattened
-        band_coords = []
-        for p in points:
-            band_coords.extend(meter2pix(p))
+        for bolt in self.rope.bolts:
+            bolt.draw(self.canvas, meter2pix, bolt_rad)
+
+        band_coords = [coord for point in self._rope_points() for coord in meter2pix(point)]
         self.band_id = self.canvas.create_line(band_coords, fill='black')
         self.belayer_id = self.canvas.create_oval(circ(self.belayer.state[:2], self.belayer.rad), fill=config.bColor)
         self.climber_id = self.canvas.create_oval(circ(self.climber.state[:2], self.climber.rad), fill=config.cColor)
@@ -285,27 +310,18 @@ class Simulation:
             self.iter_label.config(text=f'{self.n_iter:d}')
         self.update_graphics()
 
-    def update_graphics(self):
+    def _rope_points(self):
         points = [self.belayer.state[:2]]
-        if hasattr(self.rope, 'bolts') and self.rope.bolts:
-            for bolt in self.rope.bolts:
-                points.append(bolt.pos().tolist())
+        for bolt in self.rope.bolts:
+            points.append(bolt.pos().tolist())
         points.append(self.climber.state[:2])
-        band_coords = []
-        for p in points:
-            band_coords.extend(meter2pix(p))
+        return points
+
+    def update_graphics(self):
+        band_coords = [coord for point in self._rope_points() for coord in meter2pix(point)]
         self.canvas.coords(self.band_id, band_coords)
         self.canvas.coords(self.belayer_id, circ(self.belayer.state[:2], self.belayer.rad))
         self.canvas.coords(self.climber_id, circ(self.climber.state[:2], self.climber.rad))
-    def catenary(self, pos):
-        # deprecated: rope is drawn as two straight segments over the bolt
-        return meter2pix(pos)
-
-    def _cate_fun(self, x, cate_par):
-        L, cx, cy = cate_par
-        rr = np.sqrt(L**2 - cy**2) / cx
-        return rr - np.sinh(x) / x
-
     def animate(self):
         start_iter = time.time()
         if self.run_motion:

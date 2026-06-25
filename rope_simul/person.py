@@ -17,6 +17,11 @@ class Person:
   def attach_bolt(self, bolt):
       self.bolt = bolt
 
+  def initialize_on_bolt(self):
+      if self.bolt is None:
+          raise ValueError('Person has no bolt attached')
+      self.initialize_on_wall(self.bolt.wall, self.bolt.dist)
+
   def origin(self):
       if self.bolt is not None:
           return np.array(self.bolt.pos())
@@ -32,11 +37,11 @@ class Person:
 
   def initialize_on_floor(self, wall):
       floor_y = (config.Oy - config.ch + self.rad) / config.scale
-      floor_point = [0.0, floor_y]
-      if wall.distance(floor_point) < 0.0:
-          self.initialize_on_wall(wall, dist=floor_y)
+      if self.bolt is not None:
+          x = self.bolt.pos()[0]
       else:
-          self.state = [0.0, floor_y, 0.0, 0.0]
+          x = wall.point_on(0.0)[0]
+      self.state = [x, floor_y, 0.0, 0.0]
 
   def collision(self, wall):
         pos = np.array(self.state[:2])
