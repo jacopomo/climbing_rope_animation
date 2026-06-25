@@ -38,39 +38,6 @@ class Simulation:
         self._init_canvas_items()
         self.update_graphics()
 
-    @staticmethod
-    def create_scene(wall, N=5, slack=None, mass=None, rad=None, rope_specs=None):
-        from .bolt import Bolt
-        from .person import Person
-        from .rope import Rope
-
-        if slack is None:
-            slack = config.L
-        if mass is None:
-            mass = config.m
-        if rad is None:
-            rad = config.rad
-        if rope_specs is None:
-            rope_specs = (config.k1, config.k3)
-
-        bolts = Bolt.generate(wall, N=N)
-        belayer = Person(rad=rad, mass=mass)
-        climber = Person(rad=rad, mass=mass)
-
-        if bolts:
-            bottom_bolt = bolts[0]
-            top_bolt = bolts[-1]
-            belayer.attach_bolt(bottom_bolt)
-            climber.attach_bolt(top_bolt)
-            belayer.initialize_on_floor(wall)
-            climber.initialize_on_bolt()
-        else:
-            belayer.initialize_on_floor(wall)
-            climber.initialize_on_wall(wall, dist=0.0)
-
-        rope = Rope(rope_specs, belayer, climber, bolts=bolts, slack=slack)
-        return belayer, climber, rope, bolts
-
     def _build_ui(self):
         cw, ch = config.cw, config.ch
 

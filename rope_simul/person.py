@@ -4,46 +4,30 @@ from numpy.linalg import norm
 from . import config
 
 class Person:
-  def __init__(self, state=None, rad=0.0, mass=0.0, bolt=None, grabbed=False):
-      self.rad = rad
-      self.mass = mass
-      self.bolt = bolt
-      self.grabbed = grabbed
-      if state is None:
-          self.state = [0.0, 0.0, 0.0, 0.0]
-      else:
-          self.state = state
+    def __init__(self, state=None, rad=0.0, mass=0.0, bolt=None, grabbed=False):
+        self.rad = rad
+        self.mass = mass
+        self.bolt = bolt
+        self.grabbed = grabbed
+        if state is None:
+            self.state = [0.0, 0.0, 0.0, 0.0]
+        else:
+            self.state = state
+        if self.bolt is None:
+            raise ValueError('Person has no bolt attached')
+        self.bolt = bolt
 
-  def attach_bolt(self, bolt):
-      self.bolt = bolt
+    def initialize_on_wall(self, wall, dist):
+        x = self.bolt.pos()[0] + wall.point_on(dist)[0] + wall.normal_vector()[0] * (1.01 * self.rad / config.scale)
+        y = self.bolt.pos()[1] + wall.point_on(dist)[1] + wall.normal_vector()[1] * (1.01 * self.rad / config.scale)
+        self.state = [x, y, 0.0, 0.0]
 
-  def initialize_on_bolt(self):
-      if self.bolt is None:
-          raise ValueError('Person has no bolt attached')
-      self.initialize_on_wall(self.bolt.wall, self.bolt.dist)
+    def initialize_on_floor(self): #Still missing bottom of the wall functionality
+        floor_y = (config.Oy - config.ch + self.rad) / config.scale
+        x = self.bolt.pos()[0]
+        self.state = [x, floor_y, 0.0, 0.0]
 
-  def origin(self):
-      if self.bolt is not None:
-          return np.array(self.bolt.pos())
-      return np.array([0.0, 0.0])
-
-  def relative_position(self):
-      return np.array(self.state[:2]) - self.origin()
-
-  def initialize_on_wall(self, wall, dist):
-      x = wall.point_on(dist)[0] + wall.normal_vector()[0] * (1.01 * self.rad / config.scale)
-      y = wall.point_on(dist)[1] + wall.normal_vector()[1] * (1.01 * self.rad / config.scale)
-      self.state = [x, y, 0.0, 0.0]
-
-  def initialize_on_floor(self, wall):
-      floor_y = (config.Oy - config.ch + self.rad) / config.scale
-      if self.bolt is not None:
-          x = self.bolt.pos()[0]
-      else:
-          x = wall.point_on(0.0)[0]
-      self.state = [x, floor_y, 0.0, 0.0]
-
-  def collision(self, wall):
+    def collision(self, wall):
         pos = np.array(self.state[:2])
         vel = np.array(self.state[2:])
         d_signed = wall.distance(pos)

@@ -6,7 +6,7 @@ L = 1.0                 # Slack in meters
 inclination = 15        # Inclination in degrees
 
 ButtWidth = 9
-cw, ch = 800, 640
+cw, ch = 1400, 900
 Ox, Oy = cw // 2, ch // 2
 
 bolt_rad = 4            # Bolt radius

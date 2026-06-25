@@ -4,7 +4,7 @@ from . import config
 
 class Bolt:
     def __init__(self, wall, distance):
-        # distance along the wall from the pivot (meters)
+        # distance along the wall from the origin (meters)
         self.wall = wall
         self.dist = distance
 
@@ -17,22 +17,18 @@ class Bolt:
         canvas.create_oval(x-bolt_rad, y-bolt_rad, x+bolt_rad, y+bolt_rad, fill=color)
 
     @staticmethod
-    def generate(wall, N=5, cw=None, ch=None, scale=None, Ox=None, Oy=None, margin=2.0):
+    def generate(wall, N=5, margin=3.0):
         """Generate N Bolt objects distributed along the visible portion of the wall.
 
         Parameters default to values from rope_simul.config when omitted.
         Returns list of Bolt instances.
         """
-        from . import config
 
-        if cw is None: cw = config.cw
-        if ch is None: ch = config.ch
-        if scale is None: scale = config.scale
-        if Ox is None: Ox = config.Ox
-        if Oy is None: Oy = config.Oy
+        cw, ch = config.cw, config.ch
+        scale = config.scale
+        Ox, Oy = config.Ox, config.Oy
 
-        theta = np.radians(wall.inclination)
-        wall_dir = np.array([np.sin(theta), np.cos(theta)])
+        wall_dir = wall.direction()
 
         # compute canvas corners in meters relative to pivot (Ox,Oy)
         corners_px = [(0, 0), (cw, 0), (0, ch), (cw, ch)]
@@ -53,28 +49,3 @@ class Bolt:
         bolts = [Bolt(wall, d) for d in dists]
         bolts.sort(key=lambda bolt: bolt.dist)
         return bolts
-
-    @classmethod
-    def generate_along_wall(cls, wall, N=5, margin=2.0):
-        """Generate N bolts along the visible portion of the wall within the canvas.
-        Bolts are placed by projecting the canvas corners onto the wall direction
-        and spacing N distances evenly between the visible min and max, leaving a margin.
-        Returns a list of Bolt instances.
-        """
-        cw, ch, scale = config.cw, config.ch, config.scale
-        theta = np.radians(config.inclination)
-        wall_dir = np.array([np.sin(theta), np.cos(theta)])
-        Ox, Oy = config.Ox, config.Oy
-        corners_px = [(0, 0), (cw, 0), (0, ch), (cw, ch)]
-        corners_m = []
-        for px, py in corners_px:
-            x_m = (px - Ox) / scale
-            y_m = (Oy - py) / scale
-            corners_m.append(np.array([x_m, y_m]))
-        projs = [np.dot(c, wall_dir) for c in corners_m]
-        min_proj, max_proj = min(projs), max(projs)
-        if max_proj - min_proj <= 2 * margin or N <= 1:
-            dists = [ (min_proj + max_proj) / 2.0 ]
-        else:
-            dists = list(np.linspace(min_proj + margin, max_proj - margin, N))
-        return [cls(wall, d) for d in dists]

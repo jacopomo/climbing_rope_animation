@@ -8,12 +8,16 @@ class Wall:
 
   def point_on(self, distance):
       '''
-      distance in meters returns [x,y] in meters along the wall direction from pivot
+      distance in meters returns [x,y] in meters along the wall direction from origin
       '''
       theta = np.radians(self.inclination)
       dx = distance * np.sin(theta)
       dy = distance * np.cos(theta)
       return dx, dy
+  
+  def direction(self):
+      theta = np.radians(self.inclination)
+      return np.array([np.sin(theta), np.cos(theta)])
   
   def normal_vector(self):
       theta = np.radians(self.inclination)
