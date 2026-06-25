@@ -8,7 +8,7 @@ from . import config
 from .utils import meter2pix, circ
 
 
-class RopeApp:
+class Simulation:
     def __init__(self, belayer, climber, rope, wall):
         self.belayer = belayer
         self.climber = climber
@@ -96,11 +96,12 @@ class RopeApp:
 
     def _draw_static_objects(self):
         Ox, Oy = config.Ox, config.Oy
-        prad = config.prad
-        self.canvas.create_oval(Ox-prad, Oy-prad, Ox+prad, Oy+prad, fill='black')
+        bolt_rad = config.bolt_rad
+        self.canvas.create_oval(Ox-bolt_rad, Oy-bolt_rad, Ox+bolt_rad, Oy+bolt_rad, fill='black')
         self.wall.draw(self.canvas)
         self.band_id = self.canvas.create_line([Ox, Oy] + meter2pix(self.climber.state[:2]), fill='black')
-        self.bob_id = self.canvas.create_oval(circ(self.climber.state[:2], self.climber.rad), fill=config.bColor)
+        self.belayer_id = self.canvas.create_oval(circ(self.belayer.state[:2], self.belayer.rad), fill=config.bColor)
+        self.climber_id = self.canvas.create_oval(circ(self.climber.state[:2], self.climber.rad), fill=config.cColor)
 
     def start_stop(self):
         self.run_motion = not self.run_motion
@@ -119,17 +120,7 @@ class RopeApp:
             entry.delete(0, END)
             entry.insert(0, f'{self.inputs[i]:.3f}')
 
-        self.climber.state = self.inputs[:4]
-        self.rope.slack = self.inputs[4]
-        self.rope.k1 = self.inputs[5]
-        self.rope.k3 = self.inputs[6]
-        self.climber.mass = self.inputs[7]
-        config.delta = self.inputs[8]
-        config.scale = self.inputs[9]
-        config.dt = self.inputs[10]
-        config.tau = int(self.inputs[11])
-        self.t = [0.0, config.dt]
-        self.rope.l0 = self.rope.initial_length()
+        self._apply_inputs()
 
         self.n_iter = 0
         self.tcount = 0
@@ -147,7 +138,11 @@ class RopeApp:
         self.var_entries[key].delete(0, END)
         self.var_entries[key].insert(0, f'{value:.3f}')
 
-        self.climber.state = self.inputs[:4]
+        self._apply_inputs()
+        self.update_graphics()
+
+    def _apply_inputs(self):
+        self.climber.state = self.inputs[:4].copy()
         self.rope.slack = self.inputs[4]
         self.rope.k1 = self.inputs[5]
         self.rope.k3 = self.inputs[6]
@@ -158,7 +153,6 @@ class RopeApp:
         config.tau = int(self.inputs[11])
         self.t = [0.0, config.dt]
         self.rope.l0 = self.rope.initial_length()
-        self.update_graphics()
 
     def on_grab(self, event):
         if self.run_motion:
@@ -214,7 +208,8 @@ class RopeApp:
 
     def update_graphics(self):
         self.canvas.coords(self.band_id, [config.Ox, config.Oy] + self.catenary(self.climber.state[:2]))
-        self.canvas.coords(self.bob_id, circ(self.climber.state[:2], self.climber.rad))
+        self.canvas.coords(self.belayer_id, circ(self.belayer.state[:2], self.belayer.rad))
+        self.canvas.coords(self.climber_id, circ(self.climber.state[:2], self.climber.rad))
 
     def catenary(self, pos):
         r = np.linalg.norm(pos)

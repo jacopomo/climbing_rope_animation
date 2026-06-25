@@ -1,5 +1,4 @@
-from .belayer import Belayer
-from .climber import Climber
+from .person import Person
 from .rope import Rope
 from .wall import Wall
-from .app import RopeApp
+from .animation import Simulation

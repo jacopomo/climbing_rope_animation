@@ -3,7 +3,7 @@ from numpy.linalg import norm
 
 from . import config
 
-class Climber:
+class Person:
   def __init__(self, state, rad, mass, grabbed=False):
       self.state = state
       self.rad = rad
@@ -14,6 +14,14 @@ class Climber:
       x = wall.point_on(dist)[0] + wall.normal_vector()[0] * (1.01 * self.rad / config.scale)
       y = wall.point_on(dist)[1] + wall.normal_vector()[1] * (1.01 * self.rad / config.scale)
       self.state = [x, y, 0.0, 0.0]
+
+  def initialize_on_floor(self, wall):
+      floor_y = (config.Oy - config.ch + self.rad) / config.scale
+      floor_point = [0.0, floor_y]
+      if wall.distance(floor_point) < 0.0:
+          self.initialize_on_wall(wall, dist=floor_y)
+      else:
+          self.state = [0.0, floor_y, 0.0, 0.0]
 
   def collision(self, wall):
     pos = np.array(self.state[:2])

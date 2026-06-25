@@ -1,9 +1,6 @@
-import time
 """
 Global Configuration and Shared State
 """
-
-RunMotion = False
 
 L = 2.3                 # Slack in meters
 inclination = 15        # Inclination in degrees
@@ -12,16 +9,14 @@ ButtWidth = 9
 cw, ch = 800, 640
 Ox, Oy = cw // 2, ch // 2
 
-prad = 2                # Pivot radius
+bolt_rad = 2            # Bolt radius
 rad = 15                # Bob radius
-bColor = 'red'          # Bob color
+bColor = 'blue'          # Belayer color
+cColor = 'red'          # Climber color
+
 scale = 100.0           # Pixels per meter
 tau = 20                # Timer interval in milliseconds
 dt = 0.01               # Physics time step
-
-nIter = 0
-tcount = 0
-tt0 = time.time()
 
 m = 80                  # Mass in kg
 w1 = 8.6                # s^-1
