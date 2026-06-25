@@ -97,9 +97,23 @@ class Simulation:
     def _draw_static_objects(self):
         Ox, Oy = config.Ox, config.Oy
         bolt_rad = config.bolt_rad
-        self.canvas.create_oval(Ox-bolt_rad, Oy-bolt_rad, Ox+bolt_rad, Oy+bolt_rad, fill='black')
         self.wall.draw(self.canvas)
-        self.band_id = self.canvas.create_line([Ox, Oy] + meter2pix(self.climber.state[:2]), fill='black')
+        # draw floor as horizontal line
+        floor_y_px = meter2pix([0.0, (config.Oy - config.ch + 0)/config.scale])[1]
+        self.canvas.create_line(0, floor_y_px, config.cw, floor_y_px, fill='black', width=4)
+
+        # draw bolts if present and build rope points
+        points = [self.belayer.state[:2]]
+        if hasattr(self.rope, 'bolts') and self.rope.bolts:
+            for bolt in self.rope.bolts:
+                bolt.draw(self.canvas, meter2pix, bolt_rad)
+                points.append(bolt.pos().tolist())
+        points.append(self.climber.state[:2])
+        # convert to pixel coords flattened
+        band_coords = []
+        for p in points:
+            band_coords.extend(meter2pix(p))
+        self.band_id = self.canvas.create_line(band_coords, fill='black')
         self.belayer_id = self.canvas.create_oval(circ(self.belayer.state[:2], self.belayer.rad), fill=config.bColor)
         self.climber_id = self.canvas.create_oval(circ(self.climber.state[:2], self.climber.rad), fill=config.cColor)
 
@@ -177,59 +191,115 @@ class Simulation:
         self.update_graphics()
 
     def _dfdt(self, state, t):
-        pos = np.array(state[:2])
-        vel = np.array(state[2:])
-        r = np.linalg.norm(pos)
-        stretch = self.rope.stretch()
-        m = self.climber.mass
+        # state is [b_x, b_y, b_vx, b_vy, c_x, c_y, c_vx, c_vy]
+        # positions and velocities for belayer
+        pos_b = np.array(state[0:2])
+        vel_b = np.array(state[2:4])
+        # positions and velocities for climber
+        pos_c = np.array(state[4:6])
+        vel_c = np.array(state[6:8])
 
-        r_dot = np.dot(pos, vel) / r if r > 1e-6 else 0.0
-        if stretch > 0:
-            force = self.rope.elastic_force()
-            force_vec = force * pos / r
-            damping_force = -2 * m * config.delta * r_dot * (1.0 if r_dot > 0 else 0.0)
-            damping_vec = damping_force * pos / r
-            fx = force_vec[0] + damping_vec[0]
-            fy = force_vec[1] + damping_vec[1] - m * config.g
+        # compute segment vectors for belayer->first_bolt and last_bolt->climber
+        if hasattr(self.rope, 'bolts') and self.rope.bolts:
+            first_pos = np.array(self.rope.bolts[0].pos())
+            last_pos = np.array(self.rope.bolts[-1].pos())
         else:
-            fx = 0.0
-            fy = -m * config.g
+            # default to origin for single-pulley setup
+            first_pos = np.array([0.0, 0.0])
+            last_pos = np.array([0.0, 0.0])
 
-        return [vel[0], vel[1], fx / m, fy / m]
+        dir_b = first_pos - pos_b
+        dir_c = last_pos - pos_c
+        r_b = np.linalg.norm(dir_b)
+        r_c = np.linalg.norm(dir_c)
+
+        # total stretch based on piecewise distances
+        s = max(0.0, self.rope.calculate_distance() - self.rope.l0)
+
+        # rope tension magnitude (positive) - rope.elastic_force() returns negative when stretched
+        Tmag = -self.rope.elastic_force() if s > 0.0 else 0.0
+
+        # radial velocities (projection of velocity onto segment direction)
+        rdot_b = np.dot(dir_b, vel_b) / r_b if r_b > 1e-6 else 0.0
+        rdot_c = np.dot(dir_c, vel_c) / r_c if r_c > 1e-6 else 0.0
+
+        # simple damping along the rope segments (only when extending)
+        damp_b = -config.delta * rdot_b * (1.0 if rdot_b > 0 else 0.0)
+        damp_c = -config.delta * rdot_c * (1.0 if rdot_c > 0 else 0.0)
+
+        m_b = self.belayer.mass
+        m_c = self.climber.mass
+
+        # friction through all bolts: linear in rope sliding speed (scaled by number of bolts)
+        n_bolts = len(self.rope.bolts) if hasattr(self.rope, 'bolts') else 0
+        gamma = getattr(config, 'bolt_friction', 0.0) * max(1, n_bolts)
+        # sliding speed approximation
+        v_slide = rdot_b + rdot_c
+        Ff = -gamma * v_slide
+
+        # unit direction vectors
+        ub = dir_b / r_b if r_b > 1e-6 else np.array([0.0, 0.0])
+        uc = dir_c / r_c if r_c > 1e-6 else np.array([0.0, 0.0])
+
+        # forces on belayer: tension along its segment toward the bolt + damping + bolt friction, minus gravity
+        if r_b > 1e-6 and Tmag != 0.0:
+            force_b_vec = Tmag * ub
+            damping_b_vec = damp_b * ub
+            bolt_b_vec = Ff * ub
+            fx_b = force_b_vec[0] + damping_b_vec[0] + bolt_b_vec[0]
+            fy_b = force_b_vec[1] + damping_b_vec[1] + bolt_b_vec[1] - m_b * config.g
+        else:
+            fx_b = 0.0
+            fy_b = -m_b * config.g
+        # forces on climber: tension along its segment toward the bolt + damping + bolt friction, minus gravity
+        if r_c > 1e-6 and Tmag != 0.0:
+            force_c_vec = Tmag * uc
+            damping_c_vec = damp_c * uc
+            bolt_c_vec = -Ff * uc
+            fx_c = force_c_vec[0] + damping_c_vec[0] + bolt_c_vec[0]
+            fy_c = force_c_vec[1] + damping_c_vec[1] + bolt_c_vec[1] - m_c * config.g
+        else:
+            fx_c = 0.0
+            fy_c = -m_c * config.g
+
+        # accelerations
+        ax_b = fx_b / m_b
+        ay_b = fy_b / m_b
+        ax_c = fx_c / m_c
+        ay_c = fy_c / m_c
+
+        return [vel_b[0], vel_b[1], ax_b, ay_b, vel_c[0], vel_c[1], ax_c, ay_c]
 
     def step(self):
         self.n_iter += 1
-        solution = odeint(self._dfdt, self.climber.state, self.t)
-        self.climber.state = solution[1].tolist()
+        # integrate both belayer and climber states together
+        combined = self.belayer.state + self.climber.state
+        solution = odeint(self._dfdt, combined, self.t)
+        new = solution[1].tolist()
+        self.belayer.state = new[0:4]
+        self.climber.state = new[4:8]
+        # handle collisions
         self.climber.collision(self.wall)
+        self.belayer.collision(self.wall)
         if self.n_iter % 20 == 0:
             self.iter_label.config(text=f'{self.n_iter:d}')
         self.update_graphics()
 
     def update_graphics(self):
-        self.canvas.coords(self.band_id, [config.Ox, config.Oy] + self.catenary(self.climber.state[:2]))
+        points = [self.belayer.state[:2]]
+        if hasattr(self.rope, 'bolts') and self.rope.bolts:
+            for bolt in self.rope.bolts:
+                points.append(bolt.pos().tolist())
+        points.append(self.climber.state[:2])
+        band_coords = []
+        for p in points:
+            band_coords.extend(meter2pix(p))
+        self.canvas.coords(self.band_id, band_coords)
         self.canvas.coords(self.belayer_id, circ(self.belayer.state[:2], self.belayer.rad))
         self.canvas.coords(self.climber_id, circ(self.climber.state[:2], self.climber.rad))
-
     def catenary(self, pos):
-        r = np.linalg.norm(pos)
-        band = [config.Ox, config.Oy]
-        if r < self.rope.slack:
-            if abs(pos[0] * config.scale) < 4:
-                band.extend(meter2pix([0.5 * pos[0], 0.5 * (pos[1] - self.rope.slack)]))
-            else:
-                absx = abs(pos[0])
-                cate_par = [self.rope.slack, absx, pos[1]]
-                AA0 = 0.01
-                AA = fsolve(self._cate_fun, AA0, cate_par)[0]
-                aa = 0.5 * absx / AA
-                bb = 0.5 * absx - aa * np.arctanh(pos[1] / self.rope.slack)
-                cc = 0.5 * (pos[1] - self.rope.slack / np.tanh(AA))
-                for i in range(1, 20):
-                    x1 = pos[0] * i / 20.0
-                    band.extend(meter2pix([x1, aa * np.cosh((abs(x1) - bb) / aa) + cc]))
-        band.extend(meter2pix(pos))
-        return band
+        # deprecated: rope is drawn as two straight segments over the bolt
+        return meter2pix(pos)
 
     def _cate_fun(self, x, cate_par):
         L, cx, cy = cate_par
