@@ -1,3 +1,4 @@
+import time
 """
 Global Configuration and Shared State
 """
@@ -18,6 +19,10 @@ scale = 100.0           # Pixels per meter
 tau = 20                # Timer interval in milliseconds
 dt = 0.01               # Physics time step
 
+nIter = 0
+tcount = 0
+tt0 = time.time()
+
 m = 80                  # Mass in kg
 w1 = 8.6                # s^-1
 w3 = 4.5                # m^-2 * s^-1
@@ -26,3 +31,6 @@ g = 9.8
 
 k1 = m * w1**2          # N * m^-1
 k3 = m * w3**2          # N * m^-3
+
+x = y = vx = vy = 0.0
+inputs = [x, y, vx, vy, L, k1, k3, m, delta, scale, dt, tau]
