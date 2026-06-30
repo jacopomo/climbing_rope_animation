@@ -8,7 +8,7 @@ class Wall:
 
   def point_on(self, distance):
       '''
-      distance in meters returns [x,y] in meters along the wall direction from origin
+      Distance in meters returns [x,y] in meters along the wall direction from origin
       '''
       theta = np.radians(self.inclination)
       dx = distance * np.sin(theta)
@@ -24,6 +24,9 @@ class Wall:
       return np.array([np.cos(theta), -np.sin(theta)])
 
   def distance(self, pos):
+      '''
+      Distance from a point to the nearest point on the wall
+      '''
       return np.dot(np.array(pos), self.normal_vector())
   
   def draw(self, canvas):

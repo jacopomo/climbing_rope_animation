@@ -158,7 +158,7 @@ class Simulation:
         config.dt = self.inputs[10]
         config.tau = int(self.inputs[11])
         self.t = [0.0, config.dt]
-        self.rope.l0 = self.rope.initial_length()
+        self.rope.l0 = self.rope.l0
 
     def on_grab(self, event):
         if self.run_motion:
@@ -192,41 +192,41 @@ class Simulation:
         vel_c = np.array(state[6:8])
 
         # compute segment vectors for belayer->first_bolt and last_bolt->climber
-        if hasattr(self.rope, 'bolts') and self.rope.bolts:
-            first_pos = np.array(self.rope.bolts[0].pos())
-            last_pos = np.array(self.rope.bolts[-1].pos())
-        else:
-            # default to origin for single-pulley setup
-            first_pos = np.array([0.0, 0.0])
-            last_pos = np.array([0.0, 0.0])
+        first_pos = self.belayer.bolt.pos()
+        last_pos = self.climber.bolt.pos()
 
+        # Point from person to bolt
         dir_b = first_pos - pos_b
         dir_c = last_pos - pos_c
         r_b = np.linalg.norm(dir_b)
         r_c = np.linalg.norm(dir_c)
 
         # total stretch based on piecewise distances
-        s = max(0.0, self.rope.calculate_distance() - self.rope.l0)
+        s = self.rope.stretch()
 
-        # rope tension magnitude (positive) - rope.elastic_force() returns negative when stretched
-        Tmag = -self.rope.elastic_force() if s > 0.0 else 0.0
+        # rope tension magnitude (positive)
+        Tmag = self.rope.elastic_force() if s > 0.0 else 0.0
 
         # radial velocities (projection of velocity onto segment direction)
         rdot_b = np.dot(dir_b, vel_b) / r_b if r_b > 1e-6 else 0.0
         rdot_c = np.dot(dir_c, vel_c) / r_c if r_c > 1e-6 else 0.0
 
-        # simple damping along the rope segments (only when extending)
-        damp_b = -config.delta * rdot_b * (1.0 if rdot_b > 0 else 0.0)
-        damp_c = -config.delta * rdot_c * (1.0 if rdot_c > 0 else 0.0)
+        # rope damping along the rope segments (only when extending)
+        rope_damp_b = config.delta * rdot_b * (1.0 if rdot_b < 0 else 0.0)
+        rope_damp_c = config.delta * rdot_c * (1.0 if rdot_c < 0 else 0.0)
+        
+        air_damp_b = config.eta * rdot_b ** 2
+        air_damp_c = config.eta * rdot_c ** 2
+
+        bolt_damp_b = config.bolt_friction * rdot_b
+        bolt_damp_c = config.bolt_friction * rdot_c
+
+        # Air + bolt dampening
+        damp_b = rope_damp_b + air_damp_b + bolt_damp_b
+        damp_c = rope_damp_c + air_damp_c + bolt_damp_c
 
         m_b = self.belayer.mass
         m_c = self.climber.mass
-
-        # friction through bolts: linear in rope sliding speed 
-        gamma = getattr(config, 'bolt_friction', 0.0)
-        # sliding speed approximation
-        v_slide = rdot_b + rdot_c
-        Ff = -gamma * v_slide
 
         # unit direction vectors
         ub = dir_b / r_b if r_b > 1e-6 else np.array([0.0, 0.0])
@@ -235,20 +235,18 @@ class Simulation:
         # forces on belayer: tension along its segment toward the bolt + damping + bolt friction, minus gravity
         if r_b > 1e-6 and Tmag != 0.0:
             force_b_vec = Tmag * ub
-            damping_b_vec = damp_b * ub
-            bolt_b_vec = Ff * ub
-            fx_b = force_b_vec[0] + damping_b_vec[0] + bolt_b_vec[0]
-            fy_b = force_b_vec[1] + damping_b_vec[1] + bolt_b_vec[1] - m_b * config.g
+            damping_b_vec = -damp_b * ub
+            fx_b = force_b_vec[0] + damping_b_vec[0]
+            fy_b = force_b_vec[1] + damping_b_vec[1] - m_b * config.g
         else:
             fx_b = 0.0
             fy_b = -m_b * config.g
         # forces on climber: tension along its segment toward the bolt + damping + bolt friction, minus gravity
         if r_c > 1e-6 and Tmag != 0.0:
             force_c_vec = Tmag * uc
-            damping_c_vec = damp_c * uc
-            bolt_c_vec = -Ff * uc
-            fx_c = force_c_vec[0] + damping_c_vec[0] + bolt_c_vec[0]
-            fy_c = force_c_vec[1] + damping_c_vec[1] + bolt_c_vec[1] - m_c * config.g
+            damping_c_vec = -damp_c * uc
+            fx_c = force_c_vec[0] + damping_c_vec[0]
+            fy_c = force_c_vec[1] + damping_c_vec[1] - m_c * config.g
         else:
             fx_c = 0.0
             fy_c = -m_c * config.g
@@ -288,6 +286,7 @@ class Simulation:
         self.canvas.coords(self.band_id, band_coords)
         self.canvas.coords(self.belayer_id, circ(self.belayer.state[:2], self.belayer.rad))
         self.canvas.coords(self.climber_id, circ(self.climber.state[:2], self.climber.rad))
+    
     def animate(self):
         start_iter = time.time()
         if self.run_motion:

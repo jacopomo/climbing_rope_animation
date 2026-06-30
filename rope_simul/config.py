@@ -22,6 +22,7 @@ m = 80                  # Mass in kg
 w1 = 8.6                # s^-1
 w3 = 4.5                # m^-2 * s^-1
 delta = 8.6             # s^-1
+eta = 0.25              # kg/m
 g = 9.8
 
 # friction coefficient at the bolt (N per (m/s) of rope sliding).

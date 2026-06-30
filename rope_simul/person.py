@@ -1,5 +1,4 @@
 import numpy as np
-from numpy.linalg import norm
 
 from . import config
 
@@ -36,8 +35,8 @@ class Person:
         if penetration > 0.0:
             normal = wall.normal_vector()
             vel_n = np.dot(vel, normal)
-            e = 0.25
-            vel_t = vel - vel_n * normal
+            e = np.sqrt(0.05)
+            vel_t = vel - e * vel_n * normal
             vel_post = vel_t - e * vel_n * normal
             self.state[2] = vel_post[0]
             self.state[3] = vel_post[1]
@@ -46,7 +45,7 @@ class Person:
 
         # Floor collision (horizontal floor at the bottom of canvas)
         # floor_y matches initialize_on_floor calculation
-        floor_y = (config.Oy - config.ch + self.rad) / config.scale
+        floor_y = (config.Oy - config.ch) / config.scale
         # recompute pos/vel because wall collision may have modified state
         pos = np.array(self.state[:2])
         vel = np.array(self.state[2:])
@@ -55,8 +54,8 @@ class Person:
         if penetration_floor > 0.0:
             normal = np.array([0.0, 1.0])
             vel_n = np.dot(vel, normal)
-            e_floor = 0.05
-            vel_t = vel - vel_n * normal
+            e_floor = np.sqrt(0.05)
+            vel_t = vel - e_floor * vel_n * normal
             vel_post = vel_t - e_floor * vel_n * normal
             self.state[2] = vel_post[0]
             self.state[3] = vel_post[1]
