@@ -17,7 +17,7 @@ class Bolt:
         canvas.create_oval(x-bolt_rad, y-bolt_rad, x+bolt_rad, y+bolt_rad, fill=color)
 
     @staticmethod
-    def generate(wall, N=5, margin=3.0):
+    def generate(wall, margin=3.0):
         """Generate N Bolt objects distributed along the visible portion of the wall.
 
         Parameters default to values from rope_simul.config when omitted.
@@ -31,21 +31,21 @@ class Bolt:
         wall_dir = wall.direction()
 
         # compute canvas corners in meters relative to pivot (Ox,Oy)
-        corners_px = [(0, 0), (cw, 0), (0, ch), (cw, ch)]
-        corners_m = []
-        for px, py in corners_px:
-            x_m = (px - Ox) / scale
-            y_m = (Oy - py) / scale
-            corners_m.append(np.array([x_m, y_m]))
+        corners_m = [
+                    np.array([-Ox / scale, Oy / scale]),                 # (0, 0)
+                    np.array([(cw - Ox) / scale, Oy / scale]),           # (cw, 0)
+                    np.array([-Ox / scale, (Oy - ch) / scale]),          # (0, ch)
+                    np.array([(cw - Ox) / scale, (Oy - ch) / scale])     # (cw, ch)
+                ]
 
         projs = [np.dot(c, wall_dir) for c in corners_m]
         min_proj, max_proj = min(projs), max(projs)
 
-        if max_proj - min_proj <= 2*margin or N <= 1:
-            dists = [ (min_proj + max_proj) / 2.0 ]
-        else:
-            dists = list(np.linspace(min_proj + margin, max_proj - margin, N))
+        if max_proj - min_proj <= 2*margin:
+            mid_point = (min_proj + max_proj) / 2.0
+            return [Bolt(wall, mid_point), Bolt(wall, mid_point)]
 
-        bolts = [Bolt(wall, d) for d in dists]
-        bolts.sort(key=lambda bolt: bolt.dist)
-        return bolts
+        return [
+            Bolt(wall, min_proj + margin),
+            Bolt(wall, max_proj - margin)
+        ]

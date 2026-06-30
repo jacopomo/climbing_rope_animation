@@ -3,7 +3,7 @@ from rope_simul import Person, Bolt, Rope, Wall, Simulation
 import rope_simul.config as config
 
 rock = Wall(config.inclination)
-bolts = Bolt.generate(rock, N=5)
+bolts = Bolt.generate(rock)
 bottom_bolt, top_bolt = bolts[0], bolts[-1]
 
 rad, mass = config.rad, config.m

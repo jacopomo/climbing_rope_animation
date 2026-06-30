@@ -105,7 +105,7 @@ class Simulation:
             bolt.draw(self.canvas, meter2pix, bolt_rad)
 
         band_coords = [coord for point in self._rope_points() for coord in meter2pix(point)]
-        self.band_id = self.canvas.create_line(band_coords, fill='black')
+        self.band_id = self.canvas.create_line(band_coords, fill='green')
         self.belayer_id = self.canvas.create_oval(circ(self.belayer.state[:2], self.belayer.rad), fill=config.bColor)
         self.climber_id = self.canvas.create_oval(circ(self.climber.state[:2], self.climber.rad), fill=config.cColor)
 
@@ -222,9 +222,8 @@ class Simulation:
         m_b = self.belayer.mass
         m_c = self.climber.mass
 
-        # friction through all bolts: linear in rope sliding speed (scaled by number of bolts)
-        n_bolts = len(self.rope.bolts) if hasattr(self.rope, 'bolts') else 0
-        gamma = getattr(config, 'bolt_friction', 0.0) * max(1, n_bolts)
+        # friction through bolts: linear in rope sliding speed 
+        gamma = getattr(config, 'bolt_friction', 0.0)
         # sliding speed approximation
         v_slide = rdot_b + rdot_c
         Ff = -gamma * v_slide
