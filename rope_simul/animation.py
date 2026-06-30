@@ -205,7 +205,7 @@ class Simulation:
         s = self.rope.stretch()
 
         # rope tension magnitude (positive)
-        Tmag = self.rope.elastic_force() if s > 0.0 else 0.0
+        Tmag = -self.rope.elastic_force() if s > 0.0 else 0.0
 
         # radial velocities (projection of velocity onto segment direction)
         rdot_b = np.dot(dir_b, vel_b) / r_b if r_b > 1e-6 else 0.0
@@ -214,16 +214,16 @@ class Simulation:
         # rope damping along the rope segments (only when extending)
         rope_damp_b = config.delta * rdot_b * (1.0 if rdot_b < 0 else 0.0)
         rope_damp_c = config.delta * rdot_c * (1.0 if rdot_c < 0 else 0.0)
-        
-        air_damp_b = config.eta * rdot_b ** 2
-        air_damp_c = config.eta * rdot_c ** 2
 
+        # Bolt friction (linear in radial velocity)
         bolt_damp_b = config.bolt_friction * rdot_b
         bolt_damp_c = config.bolt_friction * rdot_c
 
-        # Air + bolt dampening
-        damp_b = rope_damp_b + air_damp_b + bolt_damp_b
-        damp_c = rope_damp_c + air_damp_c + bolt_damp_c
+        # Air drag (quadratic, always opposes velocity)
+        vel_b_norm = np.linalg.norm(vel_b)
+        vel_c_norm = np.linalg.norm(vel_c)
+        air_drag_b_vec = -config.eta * vel_b_norm * vel_b if vel_b_norm > 1e-6 else np.array([0.0, 0.0])
+        air_drag_c_vec = -config.eta * vel_c_norm * vel_c if vel_c_norm > 1e-6 else np.array([0.0, 0.0])
 
         m_b = self.belayer.mass
         m_c = self.climber.mass
@@ -232,24 +232,24 @@ class Simulation:
         ub = dir_b / r_b if r_b > 1e-6 else np.array([0.0, 0.0])
         uc = dir_c / r_c if r_c > 1e-6 else np.array([0.0, 0.0])
 
-        # forces on belayer: tension along its segment toward the bolt + damping + bolt friction, minus gravity
+        # forces on belayer: tension + rope/bolt damping (radial) + air drag (velocity direction) - gravity
         if r_b > 1e-6 and Tmag != 0.0:
             force_b_vec = Tmag * ub
-            damping_b_vec = -damp_b * ub
-            fx_b = force_b_vec[0] + damping_b_vec[0]
-            fy_b = force_b_vec[1] + damping_b_vec[1] - m_b * config.g
+            radial_damp_b_vec = -(rope_damp_b + bolt_damp_b) * ub
+            fx_b = force_b_vec[0] + radial_damp_b_vec[0] + air_drag_b_vec[0]
+            fy_b = force_b_vec[1] + radial_damp_b_vec[1] + air_drag_b_vec[1] - m_b * config.g
         else:
-            fx_b = 0.0
-            fy_b = -m_b * config.g
-        # forces on climber: tension along its segment toward the bolt + damping + bolt friction, minus gravity
+            fx_b = air_drag_b_vec[0]
+            fy_b = air_drag_b_vec[1] - m_b * config.g
+        # forces on climber: tension + rope/bolt damping (radial) + air drag (velocity direction) - gravity
         if r_c > 1e-6 and Tmag != 0.0:
             force_c_vec = Tmag * uc
-            damping_c_vec = -damp_c * uc
-            fx_c = force_c_vec[0] + damping_c_vec[0]
-            fy_c = force_c_vec[1] + damping_c_vec[1] - m_c * config.g
+            radial_damp_c_vec = -(rope_damp_c + bolt_damp_c) * uc
+            fx_c = force_c_vec[0] + radial_damp_c_vec[0] + air_drag_c_vec[0]
+            fy_c = force_c_vec[1] + radial_damp_c_vec[1] + air_drag_c_vec[1] - m_c * config.g
         else:
-            fx_c = 0.0
-            fy_c = -m_c * config.g
+            fx_c = air_drag_c_vec[0]
+            fy_c = air_drag_c_vec[1] - m_c * config.g
 
         # accelerations
         ax_b = fx_b / m_b
@@ -272,6 +272,17 @@ class Simulation:
         self.belayer.collision(self.wall)
         if self.n_iter % 20 == 0:
             self.iter_label.config(text=f'{self.n_iter:d}')
+        
+        # Calculate and print total energy
+        m_b = self.belayer.mass
+        m_c = self.climber.mass
+        energy_b = 0.5 * m_b * np.linalg.norm(self.belayer.state[2:4])**2 + (m_b * config.g * self.belayer.state[1])
+        energy_c = 0.5 * m_c * np.linalg.norm(self.climber.state[2:4])**2 + (m_c * config.g * self.climber.state[1])
+        energy_r = self.rope.elastic_energy()
+        total_energy = energy_b + energy_c + energy_r
+        if self.n_iter % 20 == 0:
+            print(f"Iteration {self.n_iter}: Total energy = {total_energy:.6f}")
+        
         self.update_graphics()
 
     def _rope_points(self):

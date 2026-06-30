@@ -28,4 +28,9 @@ class Rope:
   def elastic_force(self):
     k1, k3 = self.k1, self.k3
     s = self.stretch()
-    return k1*s + k3*s**3
+    return -k1*s - k3*s**3
+  
+  def elastic_energy(self):
+    k1, k3 = self.k1, self.k3
+    s = self.stretch()
+    return 0.5*k1*s**2 + 0.25*k3*s**4
