@@ -5,6 +5,8 @@ import time
 from scipy.integrate import odeint
 from scipy.optimize import fsolve
 from numpy.linalg import norm
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 
 # Global Variables
 Grabbed=RunMotion=False
@@ -158,7 +160,7 @@ def dfdt(state,t):
 
 # Create Root window
 root=Tk()
-root.title('Catenary Pendulum')
+root.title('Standard Climbing Rope Test Fall')
 
 # Add canvas to root window
 canvas=Canvas(root,width=cw,height=ch,background='#ffffff')
@@ -206,6 +208,25 @@ for i,ll in enumerate(LabList):
   Lab[i].grid(row=nr,column=1,sticky=W)
   nr+=1
 
+# Set up graph
+graph_frame = Frame(root)
+graph_frame.grid(row=0,column=2)
+fig = Figure(figsize=(5, 4), dpi=100)
+ax = fig.add_subplot(111)
+ax.set_title("Quantities Over Iterations")
+ax.set_xlabel("Iterations")
+ax.set_ylabel("1e3 * Velocity [m/s]")
+ax.grid(True)
+
+line, = ax.plot([], [], color="crimson", lw=2)
+
+# Embed the plot into Tkinter
+plot_canvas = FigureCanvasTkAgg(fig, master=graph_frame)
+plot_canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=True)
+
+# Add the interactive toolbar (Zoom, Pan, Save)
+toolbar = NavigationToolbar2Tk(plot_canvas, graph_frame)
+toolbar.update()
 # Draw Circle and Horizontal Line
 circle=canvas.create_oval(meter2pix([-L,L,L,-L]),outline='green')
 canvas.create_line(0,ch-Oy,cw,ch-Oy,fill='green')
@@ -220,10 +241,13 @@ t=[0.0,dt]
 tcount=0
 nIter=0
 tt0=time.time()
+iter_data=[]
+velocity_data = []
+position_data = []
 
 # Main animation loop
 def animate():
-  global BandImg,BobImg,Lab,nIter,state,t,tcount,tt0
+  global BandImg,BobImg,Lab,nIter,state,t,tcount,tt0, m, g
   StartIter=time.time()
   # Draw pendulum
   canvas.coords(BandImg,catenary(state[:2]))
@@ -235,7 +259,24 @@ def animate():
     state=psoln[1]
     if nIter%20==0:
       Lab[ITER]['text']=f'{nIter:d}'
+    velocity = -1e3*state[3]
+    iter_data.append(nIter)
+    velocity_data.append(velocity)
+    if len(iter_data) > 500:
+        iter_data.pop(0)
+        velocity_data.pop(0)
+    # Push new data to the plot line
+    line.set_data(iter_data, velocity_data)
+    
+    # Dynamically adjust graph limits to fit the data smoothly
+    ax.set_xlim(min(iter_data), max(iter_data)+1)
+    min_lim = 0.0 if min(velocity_data)>0 else 1.1*min(velocity_data)
+    max_lim = 0.0 if max(velocity_data)<0 else 1.1*max(velocity_data)
 
+    ax.set_ylim(min_lim, max_lim)
+    
+    # Redraw the canvas efficiently
+    plot_canvas.draw_idle()
   # Cycle Duration
   tcount+=1
   if tcount%20==0:
