@@ -218,7 +218,8 @@ ax.set_xlabel("Iterations")
 ax.set_ylabel("1e3 * Velocity [m/s]")
 ax.grid(True)
 
-line, = ax.plot([], [], color="crimson", lw=2)
+line1, = ax.plot([], [], color="crimson", lw=2)
+line2, = ax.plot([], [], color="blue", lw=2)
 
 # Embed the plot into Tkinter
 plot_canvas = FigureCanvasTkAgg(fig, master=graph_frame)
@@ -247,7 +248,7 @@ position_data = []
 
 # Main animation loop
 def animate():
-  global BandImg,BobImg,Lab,nIter,state,t,tcount,tt0, m, g
+  global BandImg,BobImg,Lab,nIter,state,t,tcount,tt0, m, g, L
   StartIter=time.time()
   # Draw pendulum
   canvas.coords(BandImg,catenary(state[:2]))
@@ -259,19 +260,25 @@ def animate():
     state=psoln[1]
     if nIter%20==0:
       Lab[ITER]['text']=f'{nIter:d}'
-    velocity = -1e3*state[3]
+    velocity_y = -1e3*state[3]
+    position_y = -1e4*(state[1] +L )
     iter_data.append(nIter)
-    velocity_data.append(velocity)
+    velocity_data.append(velocity_y)
+    position_data.append(position_y)
+
     if len(iter_data) > 500:
         iter_data.pop(0)
         velocity_data.pop(0)
+        position_data.pop(0)
     # Push new data to the plot line
-    line.set_data(iter_data, velocity_data)
-    
+    line1.set_data(iter_data, velocity_data)
+    line2.set_data(iter_data, position_data)
+
     # Dynamically adjust graph limits to fit the data smoothly
+    datas = np.concatenate((velocity_data, position_data))
     ax.set_xlim(min(iter_data), max(iter_data)+1)
-    min_lim = 0.0 if min(velocity_data)>0 else 1.1*min(velocity_data)
-    max_lim = 0.0 if max(velocity_data)<0 else 1.1*max(velocity_data)
+    min_lim = 0.0 if min(datas)>0 else 1.1*min(datas)
+    max_lim = 0.0 if max(datas)<0 else 1.1*max(datas)
 
     ax.set_ylim(min_lim, max_lim)
     
